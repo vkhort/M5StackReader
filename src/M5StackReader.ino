@@ -2,7 +2,8 @@
 // M5StackReader.ino - Высококлассная 5-задачная архитектура FreeRTOS
 // ============================================================
 #include <Arduino.h>
-// #include <M5Unified.h>
+#include <Wire.h>
+#include "XPowersLib.h"    // Библиотека питания
 #include "config.h"
 #include "classes.h"
 #include "display.h"
@@ -10,11 +11,12 @@
 #include "Reader.h" 
 
 // === ГЛОБАЛЬНЫЕ ОБЪЕКТЫ (RAM) ===
+XPowersAXP192 power;       
+Reader reader;    
 Display display;
 WorkSPIFFS myFS;
 WorkSPIFFS::ConfigData config;
 WiFiConnect wifi;
-Reader reader; 
 
 // Прототипы пяти параллельных FreeRTOS-задач
 void TaskAudioCode(void* pvParameters);
@@ -35,10 +37,13 @@ void setup() {
     delay(1000);
     Serial.println("\n=== ЧИСТЫЙ СТАРТ МЕДИАЦЕНТРА M5STACK CORE2 ===");
 
+    // Инициализируем шину I2C через константы из config.h
+    Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN); 
+
     // =========================================================================
     // НОВЫЙ ЧИСТЫЙ ШАГ 1: Старт питания и усилителя напрямую через XPowersLib
     // =========================================================================
-    if (!power.begin(Wire, AXP192_SLAVE_ADDRESS, 21, 22)) {
+    if (!power.begin(Wire, AXP192_I2C_ADDRESS, I2C_SDA_PIN, I2C_SCL_PIN)) {
         Serial.println("[ОШИБКА] Контроллер питания AXP192 не отвечает!");
     } else {
         power.setDC3Voltage(3300);   // Ток на экран и подсветку LovyanGFX (3.3В)
@@ -60,7 +65,15 @@ void setup() {
         delay(2000);
     } else {
         Serial.println("[УСПЕХ] Внутренняя память LittleFS смонтирована.");
-        workSpiffs.readConfig(); // Загружаем сохраненный конфиг Wi-Fi и оператора
+        myFS.loadConfig(config); // Загружаем сохраненный конфиг Wi-Fi и оператора
+    }
+
+        // ШАГ 3.5: Сканируем флешку, нумеруем и сортируем файлы по алфавиту
+    if (reader.begin(config)) {
+        reader.scanFiles(); 
+    } else {
+        display.showStartup("SD CARD FAILED!");
+        while (true) delay(100);
     }
 
     // 4. ИНИЦИАЛИЗАЦИЯ ЖЕЛЕЗА SD-КАРТЫ ПО ШИНЕ SPI
@@ -80,7 +93,7 @@ void setup() {
 #endif
 
     // 1. ЗВУКОВОЙ КОНВЕЙЕР (Ядро 0, Максимальный приоритет 5)
-    xTaskCreatePinnedToCore(TaskAudioCode, "AudioTask", AUDIO_TASK_STACK_SIZE, NULL, AUDIO_TASK_PRIORITY, NULL, 0);
+//    xTaskCreatePinnedToCore(TaskAudioCode, "AudioTask", AUDIO_TASK_STACK_SIZE, NULL, AUDIO_TASK_PRIORITY, NULL, 0);
 
     // 2. ОПРОС ТАЧСКРИНА (Ядро 1, Высокий приоритет 4)
     xTaskCreatePinnedToCore(TaskButtonCode, "ButtonTask", CONTROL_TASK_STACK_SIZE, NULL, 4, NULL, 1);
@@ -109,23 +122,30 @@ void TaskAudioCode(void* pvParameters) {
     }
 }
 
-// ============================================================
-// 2. ИСПРАВЛЕНО: ОТДЕЛЬНАЯ ЗАДАЧА ТАЧСКРИНА (ЯДРО 1, ОПРОС РАЗ В 50мс)
-// ============================================================
+// ============================================================================
+// КОД ОПРОСА ТАЧСКРИНА И КНОПОК ПОД ЭКРАНОМ (ЯДРО 1)
+// ============================================================================
 void TaskButtonCode(void* pvParameters) {
-#if DEBUG_MODE
-    Serial.println("[FreeRTOS] TaskButton запущена на Ядре 1 с интервалом 50мс");
-#endif
+    Reader* buttonReader = (Reader*)pvParameters;
+    
+    int16_t touchX = 0;
+    int16_t touchY = 0;
+    bool isButtonPressed = false;
+
     while (true) {
-        // Аппаратно опрашиваем емкостное стекло Core2
-        M5.update(); 
+        // Если есть физическое касание, забираем сырые координаты X и Y
+        if (display.getTouch(&touchX, &touchY)) {
+            if (!isButtonPressed) {
+                isButtonPressed = true;
+                
+                // Передаем сырые координаты в наш гениальный мозг класса Reader
+                buttonReader->pressButton(touchX, touchY); 
+            }
+        } else {
+            isButtonPressed = false; // Палец поднят — сбрасываем блокировку
+        }
 
-        // Проверяем нажатия на три нижних стеклянных кружка под экраном
-        if (M5.BtnA.wasPressed()) reader.pushButton(1); // Левый кружок
-        if (M5.BtnB.wasPressed()) reader.pushButton(2); // Центральный кружок (Play/Stop)
-        if (M5.BtnC.wasPressed()) reader.pushButton(3); // Правый кружок
-
-        vTaskDelay(50 / portTICK_PERIOD_MS); // Ваша идеальная разгрузочная пауза 50мс!
+        vTaskDelay(50 / portTICK_PERIOD_MS); // Ваша идеальная разгрузочная пауза 50мс
     }
 }
 

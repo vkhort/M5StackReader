@@ -21,10 +21,10 @@ void taskAudio(void* parameter) {
     // Извлекаем указатель на наш экземпляр класса Reader, переданный при создании таски
     Reader* readerInstance = (Reader*)parameter;
     
-    #if DEBUG_MODE
-    Serial.println("[FreeRTOS] Звуковой конвейер TaskAudio запущен на Ядре 0.");
-    #endif
-
+//    #if DEBUG_MODE
+//    Serial.println("[FreeRTOS] Звуковой конвейер TaskAudio запущен на Ядре 0.");
+//    #endif
+/*
     // Бесконечный цикл высокоприоритетной звуковой задачи FreeRTOS
     while (true) {
         // Вызываем неблокирующий конечный автомат декодера.
@@ -33,22 +33,24 @@ void taskAudio(void* parameter) {
         // и вызовем его здесь: readerInstance->loopAudio();
         
         // Для примера, если мы сделаем публичный метод loopAudio() в Reader:
-        readerInstance->loopAudio();
+//        readerInstance->loopAudio();
         
         // Никаких тяжелых delay() сюда не ставим, FreeRTOS сама отдаст микросекунды другим таскам,
         // но короткий пустой пропуск цикла (yield) защитит от срабатывания сторожевого таймера (Watchdog)
         yield();
     }
+*/
 }
 
 void Reader::loopAudio() {
-    _audio.loop(); 
+    if (_audio.isRunning()) {
+        _audio.loop();
+    }
 }
 
 // Фоновый FreeRTOS метод-работяга для Ядра 1 (Вызывается из taskControl)
 void taskControl(void* parameter) {
     if (!globalReader) return;
-
     static time_t lastSec = 0;
 
     if (globalReader->_commandQueue != nullptr) {
@@ -60,32 +62,33 @@ void taskControl(void* parameter) {
 
     globalReader->syncNTP();
 
-    struct tm timeinfo;
-    if (getLocalTime(&timeinfo)) {
-        time_t currentSec = time(nullptr);
-        if (currentSec != lastSec) {
-            lastSec = currentSec;
+    time_t currentSec = time(nullptr); // Забираем системную секунду напрямую из кристалла ESP32
 
-            extern Display display;
+    if (currentSec != lastSec) {
+        lastSec = currentSec;
+
+        // Превращаем системную секунду в понятную структуру времени (ЧЧ:ММ:СС)
+        struct tm timeinfo;
+        localtime_r(&currentSec, &timeinfo); // Эта функция работает ВСЕГДА, без интернета!
+
+        extern Display display;
+
+        // Форматируем и отправляем время на LovyanGFX экран
+        char secBuf[4]; 
+        sprintf(secBuf, "%02d", timeinfo.tm_sec);
+        display.updateTime(timeinfo.tm_hour, timeinfo.tm_min, String(secBuf));
+
+        // Обновление даты ровно раз в минуту
+        if (timeinfo.tm_sec == 0) {
+            char dateBuf[32]; // С запасом под UTF-8
+            char dayBuf[64];  // С запасом под UTF-8 длинных названий дней недели
             
-            // ИСПРАВЛЕНО: Массив на 3 символа под секунды типа "00" + ноль-терминатор
-            char secBuf[3];
-            sprintf(secBuf, "%02d", timeinfo.tm_sec);
-
-            display.updateTime(timeinfo.tm_hour, timeinfo.tm_min, String(secBuf));
-
-            if (timeinfo.tm_sec == 0) {
-                // ИСПРАВЛЕНО: Корректные размеры массивов под дату и день недели
-                char dateBuf[12];
-                char dayBuf[16];
-                
-                strftime(dateBuf, sizeof(dateBuf), "%d.%m.%y", &timeinfo);
-                strftime(dayBuf, sizeof(dayBuf), "%A", &timeinfo);
-                
-                String dayStr = String(dayBuf);
-                dayStr.toUpperCase();
-                display.updateDate(dateBuf, dayStr);
-            }
+            strftime(dateBuf, sizeof(dateBuf), "%d.%m.%y", &timeinfo);
+            strftime(dayBuf, sizeof(dayBuf), "%A", &timeinfo);
+            
+            String dayStr = String(dayBuf);
+            dayStr.toUpperCase();
+            display.updateDate(dateBuf, dayStr);
         }
     }
 }
@@ -286,7 +289,7 @@ void Reader::initAudioHardware() {
     
     // Включаем частотную коррекцию под мелкий динамик платы:
     // Срезаем хриплый бас (-15) и поднимаем средние и высокие частоты на максимум (+6)
-    _audio.setTone(8, 12, 12);
+    // _audio.setTone(8, 12, 12);
     
     _isAudioInitialized = true;
     
@@ -414,7 +417,7 @@ void Reader::pushButton(int buttonCode) {
 
             // И ТОЛЬКО ПОСЛЕ ЭТОГО запускаем или глушим аудио-движок на Ядре 0!
             if (_isPlaying) {
-                startPlaying();
+                startPlaying(_fileList[_currentFileIndex]);
             } else {
                 stopPlaying();
             }
@@ -425,3 +428,32 @@ void Reader::pushButton(int buttonCode) {
     }
 }
 
+// ============================================================================
+// АВТОМАТИЧЕСКИЙ РАСЧЕТ И ОБРАБОТКА НАЖАТИЯ ПО КООРДИНАТАМ СТЕКЛА
+// ============================================================================
+void Reader::pressButton(int16_t x, int16_t y) {
+    // Проверяем, что нажатие произошло в зоне трех нижних сенсорных кружков (Y > 240)
+    if (y > 240) {
+        // ЛЕВЫЙ КРУЖОК (Кнопка A) — X от 0 до 110
+        if (x > 0 && x < 110) {
+            #if DEBUG_MODE
+            Serial.println("[READER_TOUCH] Нажат Левый кружок -> Команда 1");
+            #endif
+            pushButton(1);
+        }
+        // ЦЕНТРАЛЬНЫЙ КРУЖОК (Кнопка B: Play/Stop) — X от 110 до 210
+        else if (x >= 110 && x < 210) {
+            #if DEBUG_MODE
+            Serial.println("[READER_TOUCH] Нажат Центральный кружок (Play/Stop) -> Команда 2");
+            #endif
+            pushButton(2);
+        }
+        // ПРАВЫЙ КРУЖОК (Кнопка C) — X от 210 до 320
+        else if (x >= 210 && x <= 320) {
+            #if DEBUG_MODE
+            Serial.println("[READER_TOUCH] Нажат Правый кружок -> Команда 3");
+            #endif
+            pushButton(3);
+        }
+    }
+}

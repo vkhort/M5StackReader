@@ -34,6 +34,11 @@
 #define SD_SPI_MISO_PIN          38
 #define SD_SPI_MOSI_PIN          23
 
+// --- АППАРАТНАЯ ШИНА I2C ДЛЯ СВЯЗИ С ЧИПОМ ПИТАНИЯ И ТАЧСКРИНОМ ---
+#define I2C_SDA_PIN              21   // Линия данных (Serial Data)
+#define I2C_SCL_PIN              22   // Линия тактирования (Serial Clock)
+#define AXP192_I2C_ADDRESS       0x34 // Физический I2C-адрес контроллера питания
+
 // --- ФИЗИЧЕСКИЕ ПИНЫ АППАРАТНОГО ВСТРОЕННОГО ДИНАМИКА CORE2 ---
 #define I2S_BCLK_PIN             12   // Тактовая частота шины I2S
 #define I2S_LRCK_PIN             0    // Выбор канала (левый/правый)

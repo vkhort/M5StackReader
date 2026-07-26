@@ -39,25 +39,25 @@ bool Display::begin() {
 }
 
 void Display::clear() {
-    if (_initialized) M5.Display.fillScreen(COLOR_BACKGROUND);
+    if (_initialized) lcd.fillScreen(COLOR_BACKGROUND);
 }
 
 void Display::setBrightness(uint8_t percent) {
-    if (_initialized) M5.Display.setBrightness(percent);
+    if (_initialized) lcd.setBrightness(percent);
 }
 
 void Display::showStartup(const String& statusText) {
     if (!_initialized) return;
-    M5.Display.fillScreen(COLOR_BACKGROUND); 
+    lcd.fillScreen(COLOR_BACKGROUND); 
 
-    M5.Display.setTextColor(COLOR_TEXT_MAIN);
-    M5.Display.setTextDatum(textdatum_t::top_left);
-    M5.Display.setFont(&fonts::Font0); M5.Display.setTextSize(2); 
+    lcd.setTextColor(COLOR_TEXT_MAIN);
+    lcd.setTextDatum(textdatum_t::top_left);
+    lcd.setFont(&fonts::Font0); lcd.setTextSize(2); 
     
-    M5.Display.drawString(PROJECT_NAME, 15, 15);
+    lcd.drawString(PROJECT_NAME, 15, 15);
     
-    M5.Display.setTextColor(COLOR_TEXT_MUTED);
-    M5.Display.drawString(statusText.c_str(), 15, 45);
+    lcd.setTextColor(COLOR_TEXT_MUTED);
+    lcd.drawString(statusText.c_str(), 15, 45);
 }
 
 void Display::updateTopBar(const String& ssid, const String& ip, bool isAPMode, const String& apPassword) {
@@ -224,7 +224,7 @@ void Display::updateBottomButtons(const String& btnA, const String& btnB, const 
 void Display::showMainInterface(const String& localIP, const String& connectedSSID, bool isAPMode) {
     if (!_initialized) return;
     clear();
-    M5.Display.drawRect(0, 0, 320, 240, COLOR_NEON_FRAME);
+    lcd.drawRect(0, 0, 320, 240, COLOR_NEON_FRAME);
 
     extern WorkSPIFFS::ConfigData config;
 

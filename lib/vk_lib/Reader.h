@@ -35,6 +35,7 @@ public:
     String getCurrentFileName() const;       // Получить имя текущего файла для бегущей строки
     
     bool isPlaying() const { return _isPlaying; } 
+    void pressButton(int16_t x, int16_t y);
     void pushButton(int buttonCode);         // НАШ УТВЕРЖДЕННЫЙ МОЗГ УПРАВЛЕНИЯ КНОПКАМИ
 
     // ---- НАШИ НОВЫЕ МЕТОДЫ ЗВУКОВОГО ДВИЖКА (ESP32-audioI2S) ----

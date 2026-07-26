@@ -100,8 +100,13 @@ public:
     void updateBottomButtons(const String& btnA, const String& btnB, const String& btnC, bool isPlaying = true);
 
     bool isInitialized() const { return _initialized; }
+    // Добавьте этот метод в public секцию вашего класса Display в файле display.h:
+    bool getTouch(int16_t* x, int16_t* y) {
+        return lcd.getTouch(x, y);
+    }
 
 private:
+    LGFX lcd;                // ИСПРАВЛЕНО: Теперь объект экрана живет внутри класса и виден методу getTouch!
     bool _initialized;
     String _lastSSID, _lastIP;
     int    _lastVolume;
