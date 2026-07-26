@@ -6,34 +6,6 @@
 #include "classes.h"
 #include "config.h"
 
-// ============================================================
-// ИСПРАВЛЕННЫЙ ПРОГРАММНЫЙ КЛАСС-МОСТ ДЛЯ M5.SPEAKER
-// ============================================================
-class AudioOutputM5 : public AudioOutput {
-public:
-    AudioOutputM5() {
-        auto cfg = M5.Speaker.config();
-        cfg.sample_rate = 44100; 
-        cfg.stereo = true;       
-        M5.Speaker.config(cfg);
-    }
-
-    virtual bool begin() override { 
-        return true; 
-    }
-
-    // ИСПРАВЛЕНО СИНТАКСИС: Теперь это строго указатель на массив (int16_t *sample)
-    virtual bool ConsumeSample(int16_t *sample) override {
-        // Передаем указатель на стерео-пару (левый и правый каналы),
-        // длина массива = 2 сэмпла, частота = 44100 Гц, stereo = true
-        return M5.Speaker.playRaw(sample, 2, 44100, true);
-    }
-    
-    virtual bool stop() override { 
-        M5.Speaker.stop(); 
-        return true; 
-    }
-};
 
 // Подключаем внешние глобальные объекты для вывода данных
 extern Display display;
@@ -46,21 +18,31 @@ Reader* globalReader = nullptr;
 // БЕЗОПАСНЫЙ ФОНОВЫЙ ЗВУКОВОЙ КОНВЕЙЕР (ЯДРО 0)
 // ============================================================
 void taskAudio(void* parameter) {
-    while(true) {
-        // КРИТИЧЕСКИЙ ФИКС: Пауза FreeRTOS ОБЯЗАНА стоять на самом входе в цикл!
-        // Она сбрасывает сторожевой таймер (Watchdog) Ядра 0 и полностью исключает перезагрузки!
-        vTaskDelay(1 / portTICK_PERIOD_MS); 
+    // Извлекаем указатель на наш экземпляр класса Reader, переданный при создании таски
+    Reader* readerInstance = (Reader*)parameter;
+    
+    #if DEBUG_MODE
+    Serial.println("[FreeRTOS] Звуковой конвейер TaskAudio запущен на Ядре 0.");
+    #endif
 
-        if (globalReader && globalReader->isPlaying() && globalReader->_decoder != nullptr) {
-            if (globalReader->_decoder->isRunning()) {
-                // Крутим один микро-шаг декодирования MP3 фрейма
-                if (!globalReader->_decoder->loop()) {
-                    // Если трек доиграл до конца — мягко останавливаем
-                    globalReader->stopPlaying();
-                }
-            }
-        }
+    // Бесконечный цикл высокоприоритетной звуковой задачи FreeRTOS
+    while (true) {
+        // Вызываем неблокирующий конечный автомат декодера.
+        // Мы вызываем метод объекта _audio напрямую через геттер, 
+        // либо, если _audio лежит в приватной секции, мы просто добавим в класс Reader метод loop()
+        // и вызовем его здесь: readerInstance->loopAudio();
+        
+        // Для примера, если мы сделаем публичный метод loopAudio() в Reader:
+        readerInstance->loopAudio();
+        
+        // Никаких тяжелых delay() сюда не ставим, FreeRTOS сама отдаст микросекунды другим таскам,
+        // но короткий пустой пропуск цикла (yield) защитит от срабатывания сторожевого таймера (Watchdog)
+        yield();
     }
+}
+
+void Reader::loopAudio() {
+    _audio.loop(); 
 }
 
 // Фоновый FreeRTOS метод-работяга для Ядра 1 (Вызывается из taskControl)
@@ -113,7 +95,6 @@ void taskControl(void* parameter) {
 // ============================================================
 Reader::Reader() 
     : _lastNtpAttempt(0), _ntpSuccess(false), _lastNtpSync(0)
-    , _decoder(nullptr), _file(nullptr), _buff(nullptr), _out(nullptr)
     , _currentFileIndex(0), _totalFiles(0), _fileList(nullptr)
     , _isPlaying(false), _currentMetadata(""), _config(nullptr)
     , _commandQueue(nullptr), _bufferMem(nullptr) 
@@ -291,48 +272,73 @@ void Reader::clearFileList() {
     }
 }
 
-// ============================================================
-// БЕЗОПАСНЫЙ ЗАПУСК СВЯЗКИ ДЕКОДЕРА И M5.SPEAKER
-// ============================================================
-void Reader::startPlaying() {
-    stopPlaying(); // Очищаем прошлые хвосты
+#include "Reader.h"
 
-    // Включаем силовое питание периферии Core2
-    M5.Power.setExtOutput(true);
-    vTaskDelay(50 / portTICK_PERIOD_MS);
-
-    // Выставляем безопасную начальную громкость встроенного динамика (от 0 до 255)
-    M5.Speaker.setVolume(32); 
-
-    String fullPath = "/" + getCurrentFileName();
-    #if DEBUG_MODE
-    Serial.printf("[Audio] Старт MP3 через M5.Speaker: %s\n", fullPath.c_str());
-    #endif
-
-    // Инициализируем программный конвейер
-    _file = new AudioFileSourceSD(fullPath.c_str());
-    _buff = new AudioFileSourceBuffer(_file, 4096); // 4Кб буфер в куче
-    _out = new AudioOutputM5();                     // ПОДКЛЮЧАЕМ НАШ УТВЕРЖДЕННЫЙ МОСТ!
+// =========================================================================
+// АППАРАТНАЯ ИНИЦИАЛИЗАЦИЯ ДИНАМИКА (Вызывается один раз при старте системы)
+// =========================================================================
+void Reader::initAudioHardware() {
+    // Настраиваем физические пины встроенного динамика M5Stack Core2 из config.h
+    _audio.setPinout(I2S_BCLK_PIN, I2S_LRCK_PIN, I2S_DOUT_PIN);
     
-    _decoder = new AudioGeneratorMP3();
-    _decoder->begin(_buff, _out);
+    // Выставляем громкость встроенного MP3-декодера (шкала от 0 до 21)
+    _audio.setVolume(21); 
+    
+    // Включаем частотную коррекцию под мелкий динамик платы:
+    // Срезаем хриплый бас (-15) и поднимаем средние и высокие частоты на максимум (+6)
+    _audio.setTone(8, 12, 12);
+    
+    _isAudioInitialized = true;
+    
+    #if DEBUG_MODE
+    Serial.println("[AUDIO] Железо встроенного динамика инициализировано (12, 0, 2).");
+    #endif
 }
 
-void Reader::stopPlaying() {
-    if (_decoder) {
-        if (_decoder->isRunning()) _decoder->stop();
-        delete _decoder; _decoder = nullptr;
+// =========================================================================
+// ОБНОВЛЕННЫЙ МЕТОД ЗАПУСКА ПРОИГРЫВАНИЯ MP3
+// =========================================================================
+bool Reader::startPlaying(const String& filename) {
+    // На всякий случай проверяем, инициализировано ли железо
+    if (!_isAudioInitialized) {
+        initAudioHardware();
     }
-    if (_buff) { delete _buff; _buff = nullptr; }
-    if (_file) { delete _file; _file = nullptr; }
-    if (_out)  { delete _out;  _out = nullptr;  }
-    
-    M5.Speaker.stop(); // Гасим встроенный звук
-    M5.Power.setExtOutput(false); // Обесточиваем усилитель в тишине
+
+    // Если прямо сейчас уже что-то играло — принудительно останавливаем
+    if (_audio.isRunning()) {
+        stopPlaying();
+    }
 
     #if DEBUG_MODE
-    Serial.println("[Audio] Звуковой тракт M5.Speaker успешно очищен.");
+    Serial.print("[READER] Попытка запустить файл: ");
+    Serial.println(filename);
     #endif
+
+    // Передаем объект файловой системы (SD) и полный путь к файлу на флешке.
+    // Библиотека сама откроет файл, прочитает ID3-теги и запустит поток декодирования.
+    if (!_audio.connecttoFS(SD, filename.c_str())) {
+        #if DEBUG_MODE
+        Serial.printf("[ОШИБКА] Движок не смог открыть файл: %s\n", filename.c_str());
+        #endif
+        return false;
+    }
+
+    #if DEBUG_MODE
+    Serial.println("[УСПЕХ] MP3-поток успешно запущен в шину I2S встроенного динамика!");
+    #endif
+    return true;
+}
+
+// =========================================================================
+// МЕТОД ПОЛНОЙ ОСТАНОВКИ ЗВУКА
+// =========================================================================
+void Reader::stopPlaying() {
+    if (_audio.isRunning()) {
+        _audio.stopSong();
+        #if DEBUG_MODE
+        Serial.println("[READER] Воспроизведение принудительно остановлено.");
+        #endif
+    }
 }
 
 // ============================================================

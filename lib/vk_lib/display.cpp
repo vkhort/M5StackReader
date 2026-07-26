@@ -20,20 +20,19 @@ Display::~Display() {
 }
 
 bool Display::begin() {
-    if (!M5.Display.getBoard()) return false;
+    lcd.init();
+    lcd.setRotation(1);
+    lcd.setColorDepth(16);
+    lcd.fillScreen(COLOR_BACKGROUND);
 
-    M5.Display.setRotation(1);
-    M5.Display.setColorDepth(16);
-    M5.Display.fillScreen(COLOR_BACKGROUND); 
-
-    _topSprite = new LGFX_Sprite(&M5.Display);     _topSprite->createSprite(ZONE_TOP_W, ZONE_TOP_H);
-    _volCtrlSprite = new LGFX_Sprite(&M5.Display); _volCtrlSprite->createSprite(ZONE_VOL_CTRL_W, ZONE_VOL_CTRL_H);
-    _volBarSprite = new LGFX_Sprite(&M5.Display);  _volBarSprite->createSprite(ZONE_VOL_BAR_W, ZONE_VOL_BAR_H);
-    _timeSprite = new LGFX_Sprite(&M5.Display);    _timeSprite->createSprite(ZONE_TIME_W, ZONE_TIME_H);
-    _dateSprite = new LGFX_Sprite(&M5.Display);    _dateSprite->createSprite(ZONE_DATE_W, ZONE_DATE_H);
-    _secSprite = new LGFX_Sprite(&M5.Display);     _secSprite->createSprite(ZONE_SEC_W, ZONE_SEC_H); // ДОБАВЛЕНО
-    _scrollSprite = new LGFX_Sprite(&M5.Display);  _scrollSprite->createSprite(ZONE_SCROLL_W, ZONE_SCROLL_H);
-    _bottomSprite = new LGFX_Sprite(&M5.Display);  _bottomSprite->createSprite(ZONE_BOTTOM_W, ZONE_BOTTOM_H);
+    _topSprite = new LGFX_Sprite(&lcd);     _topSprite->createSprite(ZONE_TOP_W, ZONE_TOP_H);
+    _volCtrlSprite = new LGFX_Sprite(&lcd); _volCtrlSprite->createSprite(ZONE_VOL_CTRL_W, ZONE_VOL_CTRL_H);
+    _volBarSprite = new LGFX_Sprite(&lcd);  _volBarSprite->createSprite(ZONE_VOL_BAR_W, ZONE_VOL_BAR_H);
+    _timeSprite = new LGFX_Sprite(&lcd);    _timeSprite->createSprite(ZONE_TIME_W, ZONE_TIME_H);
+    _dateSprite = new LGFX_Sprite(&lcd);    _dateSprite->createSprite(ZONE_DATE_W, ZONE_DATE_H);
+    _secSprite = new LGFX_Sprite(&lcd);     _secSprite->createSprite(ZONE_SEC_W, ZONE_SEC_H); // ДОБАВЛЕНО
+    _scrollSprite = new LGFX_Sprite(&lcd);  _scrollSprite->createSprite(ZONE_SCROLL_W, ZONE_SCROLL_H);
+    _bottomSprite = new LGFX_Sprite(&lcd);  _bottomSprite->createSprite(ZONE_BOTTOM_W, ZONE_BOTTOM_H);
 
     _initialized = true;
     return true;
@@ -106,7 +105,7 @@ void Display::updateVolumeBar(int volume) {
     int barHeight = _lastVolume * 5;
     int yPos = ZONE_VOL_BAR_H - barHeight;
 
-    uint16_t color = M5.Display.color565(255, 193, 7);
+    uint16_t color = lcd.color565(255, 193, 7);
     if (_lastVolume >= 5 && _lastVolume <= 15)      color = COLOR_VOL_MID;  
     else if (_lastVolume >= 16)                     color = COLOR_VOL_HIGH; 
 

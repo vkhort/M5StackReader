@@ -2,7 +2,7 @@
 // M5StackReader.ino - Высококлассная 5-задачная архитектура FreeRTOS
 // ============================================================
 #include <Arduino.h>
-#include <M5Unified.h>
+// #include <M5Unified.h>
 #include "config.h"
 #include "classes.h"
 #include "display.h"
@@ -33,34 +33,43 @@ extern void taskControl(void* parameter);
 void setup() {
     Serial.begin(115200);
     delay(1000);
+    Serial.println("\n=== ЧИСТЫЙ СТАРТ МЕДИАЦЕНТРА M5STACK CORE2 ===");
 
-    // ШАГ 1: Старт чипа питания, шин и экрана Core2
-    auto cfg = M5.config();
-    M5.begin(cfg);
-    // ============================================================
-    // АППАРАТНЫЙ ФИКС ПИТАНИЯ ДЛЯ M5UNIFIED (ЗАЩИТА ОТ ПЕРЕЗАГРУЗОК)
-    // ============================================================
-    // Жестко обесточиваем встроенный усилитель звука (динамик) на старте.
-    // Это полностью разгрузит USB-шину, чтобы Wi-Fi спокойно и без просадок поднял сеть!
-    M5.Power.setExtOutput(false);
-    // ============================================================
-    display.begin();
-    display.showStartup("Booting...");
-
-    // ШАГ 2-3: Спокойно монтируем SPIFFS и читаем настройки Wi-Fi в RAM
-    if (myFS.begin()) {
-        myFS.loadConfig(config);
+    // =========================================================================
+    // НОВЫЙ ЧИСТЫЙ ШАГ 1: Старт питания и усилителя напрямую через XPowersLib
+    // =========================================================================
+    if (!power.begin(Wire, AXP192_SLAVE_ADDRESS, 21, 22)) {
+        Serial.println("[ОШИБКА] Контроллер питания AXP192 не отвечает!");
     } else {
-        display.showStartup("SPIFFS FAILED!");
-        while (true) delay(100);
+        power.setDC3Voltage(3300);   // Ток на экран и подсветку LovyanGFX (3.3В)
+        power.setLDO2Voltage(3300);  // Ток на слот SD-карты (3.3В)
+        power.setLDO3Voltage(2000);  // Ток на доп. периферию (2.0В)
+        power.enableLDOio();         // Физически включаем встроенный аудиоусилитель NS4168
+        Serial.println("[УСПЕХ] Ток на периферию, SD-карту и усилитель подан.");
     }
 
-    // ШАГ 3.5: Сканируем флешку, нумеруем и сортируем файлы по алфавиту
-    if (reader.begin(config)) {
-        reader.scanFiles(); 
+    // 2. ЗАПУСК ЭКРАНА LOVYANGFX И ВНУТРЕННИХ СТРУКТУР ПЛАТЫ
+    display.begin();
+    display.showStartup("System Loading...");
+
+    // 3. МОНТИРУЕМ ВНУТРЕННЮЮ ПАМЯТЬ LITTLEFS / SPIFFS
+    Serial.println("[SYSTEM] Монтируем внутреннюю память LittleFS...");
+    if (!SPIFFS.begin(true)) { 
+        Serial.println("[ОШИБКА] Файловая система LittleFS повреждена!");
+        display.showStartup("LittleFS Error!");
+        delay(2000);
     } else {
-        display.showStartup("SD CARD FAILED!");
-        while (true) delay(100);
+        Serial.println("[УСПЕХ] Внутренняя память LittleFS смонтирована.");
+        workSpiffs.readConfig(); // Загружаем сохраненный конфиг Wi-Fi и оператора
+    }
+
+    // 4. ИНИЦИАЛИЗАЦИЯ ЖЕЛЕЗА SD-КАРТЫ ПО ШИНЕ SPI
+    SPI.begin(SD_SPI_SCK_PIN, SD_SPI_MISO_PIN, SD_SPI_MOSI_PIN, SD_SPI_CS_PIN);
+    if (!SD.begin(SD_SPI_CS_PIN, SPI, 25000000)) {
+        Serial.println("[ОШИБКА] Карта памяти MicroSD не обнаружена!");
+        display.showStartup("SD Card Error!");
+    } else {
+        Serial.println("[УСПЕХ] MicroSD карта успешно смонтирована.");
     }
 
     // =========================================================================

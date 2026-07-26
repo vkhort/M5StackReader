@@ -5,25 +5,21 @@
 #define DISPLAY_H
 
 #include <Arduino.h>
-#include <M5Unified.h>
+#define LGFX_AUTODETECT
+#include <LovyanGFX.hpp>
 
-
-// ============================================================
-// ЦВЕТОВАЯ ПАЛИТРА ИНТЕРФЕЙСА (АППАРАТНЫЙ ФОРМАТ RGB565)
-// ============================================================
-#define COLOR_BACKGROUND          TFT_BLACK           // Общий фон экрана
-#define COLOR_NEON_FRAME          0x4DB4              // Фирменная контурная рамка (Зелёный)
-#define COLOR_TEXT_MAIN           TFT_WHITE           // Основной текст (Часы, Имена файлов)
-#define COLOR_TEXT_MUTED          TFT_LIGHTGRAY       // Второстепенный текст (Инструкции)
-
-#define COLOR_BTN_NAV_BACK        0x3DF7              // Кнопки Назад / Тише (Синий)
-#define COLOR_BTN_NAV_NEXT        TFT_RED             // Кнопки Вперёд / Громче (Красный)
-#define COLOR_BTN_PLAY            0xFDE0              // Кнопка PLAY / Секунды (Жёлтый)
-#define COLOR_BTN_STOP            TFT_ORANGE          // Кнопка STOP (Оранжевый)
-
-#define COLOR_VOL_LOW             0xFDE0              // Громкость 0-4 (Жёлтый)
-#define COLOR_VOL_MID             0x4DB4              // Громкость 5-15 (Зелёный)
-#define COLOR_VOL_HIGH            TFT_RED             // Громкость 16-19 (Красный)
+// Цветовые константы и размеры зон (сохранены из оригинала для совместимости)
+#define COLOR_BACKGROUND    TFT_BLACK
+#define COLOR_TEXT_MAIN     TFT_WHITE
+#define COLOR_TEXT_MUTED    TFT_GREY
+#define COLOR_NEON_FRAME    0x0412
+#define COLOR_BTN_NAV_BACK  TFT_RED
+#define COLOR_BTN_NAV_NEXT  TFT_GREEN
+#define COLOR_BTN_PLAY      TFT_GREEN
+#define COLOR_BTN_STOP      TFT_RED
+#define COLOR_VOL_LOW       TFT_YELLOW
+#define COLOR_VOL_MID       TFT_GREEN
+#define COLOR_VOL_HIGH      TFT_RED
 
 // ============================================================
 // НАСТРОЙКА ШРИФТОВ ВРЕМЕНИ (ЧЕСТНЫЕ ВЕКТОРНЫЕ РАЗМЕРЫ)

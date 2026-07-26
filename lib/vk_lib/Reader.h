@@ -9,12 +9,7 @@
 #include <time.h>
 #include <freertos/queue.h>
 
-// Инклуды аудио-движка ESP8266Audio
-#include "AudioFileSourceSD.h"       // Для чтения локальных файлов с флешки
-#include "AudioFileSourceBuffer.h"   // Буферизация для стабильности
-#include "AudioGeneratorMP3.h"       // Декодер MP3
-#include "AudioGeneratorWAV.h"       // Декодер WAV
-#include "AudioOutputI2S.h"          // Вывод на ЦАП
+#include "Audio.h"      // Замена на ESP32-audioI2S
 
 #include "config.h"
 #include "classes.h"                 // Содержит WorkSPIFFS::ConfigData
@@ -31,17 +26,24 @@ struct AudioMessage {
 // ============================================================
 class Reader {
 public:
-    Reader();  // ИСПРАВЛЕНО: Убрана опечатка Readder
+    Reader(); 
     ~Reader();
 
-    // ---- Публичный интерфейс управления (вызывается из main.cpp) ----
+    // ---- Публичный интерфейс управления (вызывается из main.cpp / M5StackReader.ino) ----
     bool begin(WorkSPIFFS::ConfigData& cfg); // Старт SD-карты, создание очередей
-    void scanFiles();                         // Сканирование флешки и сортировка по алфавиту
-    
+    void scanFiles();                        // Сканирование флешки и сортировка по алфавиту
     String getCurrentFileName() const;       // Получить имя текущего файла для бегущей строки
+    
+    bool isPlaying() const { return _isPlaying; } 
+    void pushButton(int buttonCode);         // НАШ УТВЕРЖДЕННЫЙ МОЗГ УПРАВЛЕНИЯ КНОПКАМИ
 
-    bool isPlaying() const { return _isPlaying; }
-    void pushButton(int buttonCode); // НАШ УТВЕРЖДЕННЫЙ МОЗГ УПРАВЛЕНИЯ КНОПКАМИ
+    // ---- НАШИ НОВЫЕ МЕТОДЫ ЗВУКОВОГО ДВИЖКА (ESP32-audioI2S) ----
+    void initAudioHardware();                // Настройка пинов динамика 12, 0, 2
+    void loopAudio();                        // Мост для фонового вызова _audio.loop()
+    
+    bool startPlaying();                     // ИСПРАВЛЕНО: вариант БЕЗ параметров для pushButton()
+    bool startPlaying(const String& filename); // Вариант С параметром для запуска конкретного файла
+    void stopPlaying();                      // Метод остановки трека
 
 private:
     // ---- Время и Синхронизация (Пока заглушка) ----
@@ -50,16 +52,8 @@ private:
     time_t _lastNtpSync;
     struct tm _timeInfo;
 
-    // ---- Аудио-движок (Динамические указатели ESP8266Audio) ----
-//    AudioGenerator*       _decoder = nullptr; // Универсальный указатель на MP3 или WAV
-//    AudioFileSourceSD*    _file = nullptr;    // Источник данных: файл на SD-карте
-//    AudioFileSourceBuffer* _buff = nullptr;    // Буфер в оперативной памяти
-//    AudioOutput*          _out = nullptr;     // Базовый класс вывода звука
-    // ИСПРАВЛЕНО: Вместо AudioOutputI2S* используем универсальный базовый класс вывода библиотеки
-    AudioFileSourceSD*     _file;
-    AudioFileSourceBuffer* _buff;
-    AudioGeneratorMP3*     _decoder;
-    AudioOutput*           _out;      // Изменено на базовый AudioOutput, чтобы подключить наш мост!
+    Audio _audio;              // Объект нового аудио-движка ESP32-audioI2S
+    bool _isAudioInitialized;  // Флаг, чтобы не настраивать пины при каждом треке
 
     // ---- Файловый менеджер плеера (Решение нашей первой задачи) ----
     int _currentFileIndex;                    // Текущий номер файла по алфавиту (0 - первый)
@@ -82,8 +76,8 @@ private:
     String _displayTime;
 
     // ---- Внутренние приватные методы обработки ----
-    void startPlaying();
-    void stopPlaying();
+//    void startPlaying();
+//    void stopPlaying();
     void processCommand(const AudioMessage& msg); // Разбор очереди на Core 0
     void sortFileList();                          // Пузырьковая сортировка по алфавиту
     void clearFileList(); // декларируем метод очистки памяти динамического массива!
