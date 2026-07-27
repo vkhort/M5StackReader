@@ -57,6 +57,9 @@
 #define ZONE_VOL_CTRL_Y    20
 #define ZONE_VOL_CTRL_W    320
 #define ZONE_VOL_CTRL_H    30
+#define LEFT_VOL_X         10
+#define UP_VOL_Y           8
+
 
 // 3. Третья зона: Вертикальный индикатор громкости (Volume Bar)
 #define ZONE_VOL_BAR_X     0
@@ -66,15 +69,20 @@
 
 // 7. Четвёртая зона: Полноэкранная бегущая строка (Scroll Content)
 #define ZONE_SCROLL_X      0
-#define ZONE_SCROLL_Y      150
+#define ZONE_SCROLL_Y      180
 #define ZONE_SCROLL_W      320
-#define ZONE_SCROLL_H      40
+#define ZONE_SCROLL_H      30
 
 // 8. Пятая зона: Нижняя строка подсказок тач-кнопок (Bottom Buttons)
 #define ZONE_BOTTOM_X      0
-#define ZONE_BOTTOM_Y      190
+#define ZONE_BOTTOM_Y      209
 #define ZONE_BOTTOM_W      320
-#define ZONE_BOTTOM_H      50
+#define ZONE_BOTTOM_H      30
+#define LEFT_BUTTON_X      18
+#define MIDDLE_BUTTON_X    125
+#define RIGHT_BUTTON_X     231
+
+
 
 // ============================================================
 // КЛАСС УПРАВЛЕНИЯ ДИСПЛЕЕМ M5STACK CORE2

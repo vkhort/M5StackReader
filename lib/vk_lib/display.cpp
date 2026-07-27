@@ -87,11 +87,11 @@ void Display::updateVolumeControls() {
     
     _volCtrlSprite->setTextColor(COLOR_BTN_NAV_BACK); 
     _volCtrlSprite->setTextDatum(textdatum_t::top_left);
-    _volCtrlSprite->drawString(" [ < ]  ↓VOL", 15, 8);
+    _volCtrlSprite->drawString(" [ < ]↓VOL", LEFT_VOL_X, UP_VOL_Y);
     
     _volCtrlSprite->setTextColor(COLOR_BTN_NAV_NEXT); 
     _volCtrlSprite->setTextDatum(textdatum_t::top_right);
-    _volCtrlSprite->drawString("VOL↑  [ > ] ", ZONE_VOL_CTRL_W - 15, 8);
+    _volCtrlSprite->drawString("VOL↑[ > ] ", ZONE_VOL_CTRL_W - LEFT_VOL_X, UP_VOL_Y);
     
     _volCtrlSprite->drawFastHLine(0, ZONE_VOL_CTRL_H - 1, ZONE_VOL_CTRL_W, COLOR_NEON_FRAME);
     _volCtrlSprite->pushSprite(ZONE_VOL_CTRL_X, ZONE_VOL_CTRL_Y);
@@ -188,9 +188,9 @@ void Display::updateScrollText(const String& fileName) {
     _scrollSprite->fillSprite(COLOR_BACKGROUND); 
     _scrollSprite->setFont(&fonts::Font0); _scrollSprite->setTextSize(2);
     _scrollSprite->setTextColor(COLOR_TEXT_MAIN);
-    _scrollSprite->setTextDatum(textdatum_t::middle_left);
-
-    _scrollSprite->drawString((">>> " + _lastScrollText).c_str(), _scrollX, ZONE_SCROLL_H / 2);
+//    _scrollSprite->setTextDatum(textdatum_t::middle_left);
+    _scrollSprite->setTextDatum(textdatum_t::top_left);
+    int textY = (ZONE_SCROLL_H - 16) / 2; 
     
     if (isPlaying) {
         _scrollX -= 2;
@@ -199,6 +199,7 @@ void Display::updateScrollText(const String& fileName) {
     } else {
         _scrollX = 5; 
     }
+    _scrollSprite->drawString((">>> " + _lastScrollText).c_str(), _scrollX, textY);
 
     _scrollSprite->pushSprite(ZONE_SCROLL_X, ZONE_SCROLL_Y);
 }
@@ -208,30 +209,62 @@ void Display::updateBottomButtons(const String& btnA, const String& btnB, const 
     _bottomSprite->fillSprite(COLOR_BACKGROUND); 
     _bottomSprite->drawFastHLine(0, 0, ZONE_BOTTOM_W, COLOR_NEON_FRAME);
     _bottomSprite->setFont(&fonts::Font0); _bottomSprite->setTextSize(2);
-    _bottomSprite->setTextDatum(textdatum_t::middle_center);
+//    _bottomSprite->setTextDatum(textdatum_t::middle_center);
+    _bottomSprite->setTextDatum(textdatum_t::top_left);
+    int textY = (ZONE_BOTTOM_H - 16) / 2; 
     
     _bottomSprite->setTextColor(COLOR_BTN_NAV_BACK); 
-    _bottomSprite->drawString(btnA.c_str(), 53, ZONE_BOTTOM_H / 2);
+    _bottomSprite->drawString(btnA.c_str(), LEFT_BUTTON_X, textY);
     
     _bottomSprite->setTextColor(isPlaying ? COLOR_BTN_PLAY : COLOR_BTN_STOP);
-    _bottomSprite->drawString(btnB.c_str(), 160, ZONE_BOTTOM_H / 2);
+    _bottomSprite->drawString(btnB.c_str(), MIDDLE_BUTTON_X, textY);
     
     _bottomSprite->setTextColor(COLOR_BTN_NAV_NEXT); 
-    _bottomSprite->drawString(btnC.c_str(), 266, ZONE_BOTTOM_H / 2);
+    _bottomSprite->drawString(btnC.c_str(), RIGHT_BUTTON_X, textY);
     _bottomSprite->pushSprite(ZONE_BOTTOM_X, ZONE_BOTTOM_Y);
 }
 
-void Display::showMainInterface(const String& localIP, const String& connectedSSID, bool isAPMode) {
-    if (!_initialized) return;
-    clear();
-    lcd.drawRect(0, 0, 320, 240, COLOR_NEON_FRAME);
-
-    extern WorkSPIFFS::ConfigData config;
-
+void Display::showMainInterface(const String& localIP, const String& connectedSSID, bool isAPMode) { 
+    if (!_initialized) return; 
+    
+    clear(); 
+    lcd.drawRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, COLOR_NEON_FRAME); 
+    
+    extern WorkSPIFFS::ConfigData config; 
     updateTopBar(connectedSSID, localIP, isAPMode, config.password); 
-    updateVolumeControls();
-    updateVolumeBar(10);
-    updateTime(0, 0, "oo");             
-    updateDate("24.07.26", "FRIDAY");   
-    updateBottomButtons("[ << ]", "[ || ]", "[ >> ]", true);
+    updateVolumeControls(); 
+    updateVolumeBar(10); 
+    
+    // ==========================================
+    // 🕒 АВТОМАТИЧЕСКИЙ ВЫВОД ВРЕМЕНИ И ДАТЫ ПРИ СТАРТЕ
+    // ==========================================
+    time_t currentSec = time(nullptr);
+    struct tm timeinfo;
+    localtime_r(&currentSec, &timeinfo);
+
+    // 1. Форматируем и выводим время
+    char secBuf[8]; // ИСПРАВЛЕНО: добавлен размер массива
+    sprintf(secBuf, "%02d", timeinfo.tm_sec);
+    // 🔥 СБРАСЫВАЕМ ИСТОРИЮ ПРОВЕРКИ, чтобы updateTime сработал на старте железно!
+//    _lastHours = -1;
+//    _lastMinutes = -1;
+    _lastSeconds = ""; // на всякий случай сбросим и секунды
+    updateTime(timeinfo.tm_hour, timeinfo.tm_min, String(secBuf));
+
+    // 2. Форматируем и выводим дату
+    char dateBuf[32]; // ИСПРАВЛЕНО: выделен массив под дату ДД.ММ.ГГ
+    char dayBuf[64];  // ИСПРАВЛЕНО: выделен массив под день недели
+    
+    strftime(dateBuf, sizeof(dateBuf), "%d.%m.%y", &timeinfo);
+    strftime(dayBuf, sizeof(dayBuf), "%A", &timeinfo);
+    
+    String dayStr = String(dayBuf);
+    dayStr.toUpperCase(); // Переводим день недели в ВЕРХНИЙ регистр
+    
+    // Теперь типы данных совпадают (char[] успешно неявно преобразуется в String)
+    updateDate(String(dateBuf), dayStr);
+    // ==========================================
+
+    updateBottomButtons("[ << ]", "[ || ]", "[ >> ]", true); 
 }
+
